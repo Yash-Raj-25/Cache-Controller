@@ -3,19 +3,7 @@
 // Self-checking testbench for the 4-way set-associative cache.
 //
 // Tests: read miss, read hit, write hit (dirty), write miss,
-//        flush, invalidate, non-cacheable bypass.
-//
-// ---- Bug fixes vs. original -------------------------------------------------
-//  FIX-TB-1  mem_lat_r moved out of initial-block initialisation — it is driven
-//             by always_ff so it must NOT also be driven by initial (multiple
-//             drivers = X / compile error in many tools).  Initialisation is
-//             done by !rst_n inside the always_ff instead.
-//  FIX-TB-2  Memory model: only starts a new read transaction when the counter
-//             is idle (mem_lat_r == 0).  Original restarted the counter on every
-//             cycle that mem_req.valid & !we, corrupting in-flight latencies.
-//  FIX-TB-3  cpu_read task waits one extra clock after de-asserting valid so
-//             the controller can return to IDLE before the next request.
-//  FIX-TB-4  Added $timeformat and timeout watchdog to prevent infinite loops.
+//        flush, invalidate, non-cacheable bypass
 // =============================================================================
 
 `timescale 1ns/1ps
@@ -52,7 +40,6 @@ module cache_tb;
     logic [2:0]   mem_lat_r;
     mem_req_t     mem_req_r;
 
-    // FIX-TB-1 / FIX-TB-2: single always_ff driver; only latch a new read when
     // the counter is idle.
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
