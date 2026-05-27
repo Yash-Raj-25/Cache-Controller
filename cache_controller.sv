@@ -16,25 +16,6 @@
 //   ST_LC_FLUSH       5 — iterate all sets/ways, write back every dirty line
 //   ST_LC_INVALIDATE  6 — iterate all sets/ways, clear all valid bits
 //   ST_LC_READ_HIT    7 — extra pipeline stage: return registered SRAM word
-//
-// ---- Bug fixes vs. original -------------------------------------------------
-//  FIX-1  req_index/req_tag decoded from latched req_r.addr in multi-cycle
-//         states — live cpu_req can change while stall is asserted.
-//  FIX-2  ta_rd_index muxed: drive iter_set_r during FLUSH / INVALIDATE so
-//         the correct set's tags are read (original always drove req_index).
-//  FIX-3  FLUSH counter advance gated: stays on a dirty entry until
-//         mem_rsp.valid — original advanced every cycle, skipping entries.
-//  FIX-4  ALLOCATE moves to MEM_WAIT unconditionally on the next clock.
-//         Original stayed in ALLOCATE until mem_rsp.valid, which is wrong
-//         for a multi-cycle memory (the response arrives in MEM_WAIT).
-//  FIX-5  nc_wait_r flag: MEM_WAIT distinguishes non-cacheable reads from
-//         cache-fill so NC reads don't install spurious tags / dirty bits.
-//  FIX-6  Read-hit pipeline: TAG_CHECK issues da_rd_en and moves to
-//         ST_LC_READ_HIT; da_rd_word is returned one cycle later once the
-//         registered SRAM output has settled.
-//  FIX-7  Removed 'logic advance' declaration inside always_ff (illegal in
-//         Verilog-2001 / many EDA tools); replaced with an equivalent
-//         combinational wire 'iter_advance'.
 // =============================================================================
 
 import cache_pkg::*;
@@ -97,7 +78,6 @@ module cache_controller (
 
     // =========================================================================
     // Address decomposition
-    // FIX-1: use live cpu_req in IDLE/TAG_CHECK; latched req_r elsewhere.
     // =========================================================================
     cpu_req_t active_req;
     always_comb begin
@@ -124,7 +104,6 @@ module cache_controller (
     logic [WAY_BITS-1:0]   ta_wr_way;
     line_meta_t  ta_wr_data;
 
-    // FIX-2: mux tag-read index so FLUSH/INVALIDATE read iter_set_r
     logic [INDEX_BITS-1:0] ta_rd_index_mux;
     always_comb begin
         if (state_r == ST_LC_FLUSH || state_r == ST_LC_INVALIDATE)
@@ -209,7 +188,6 @@ module cache_controller (
     );
 
     // =========================================================================
-    // FIX-7: iter_advance computed combinationally (no variable decl in FF)
     // 1 when the FLUSH/INVALIDATE pointer should step to the next entry.
     // =========================================================================
     logic iter_advance;
@@ -377,7 +355,6 @@ module cache_controller (
         end
 
         // ----------------------------------------------------------------------
-        // FIX-6: one extra cycle for registered SRAM output to settle
         // ----------------------------------------------------------------------
         ST_LC_READ_HIT: begin
             cpu_rsp.valid    = 1'b1;
@@ -410,7 +387,6 @@ module cache_controller (
         end
 
         // ----------------------------------------------------------------------
-        // FIX-4: always move to MEM_WAIT next cycle (don't wait for mem_rsp here)
         // ----------------------------------------------------------------------
         ST_LC_ALLOCATE: begin
             cpu_rsp.stall = 1'b1;
@@ -421,7 +397,6 @@ module cache_controller (
         end
 
         // ----------------------------------------------------------------------
-        // FIX-5: NC path skips tag install; cache-fill path installs normally
         // ----------------------------------------------------------------------
         ST_LC_MEM_WAIT: begin
             cpu_rsp.stall = 1'b1;
@@ -461,7 +436,6 @@ module cache_controller (
 
         // ----------------------------------------------------------------------
         // FLUSH: walk every set×way; write back each dirty line.
-        // FIX-3: hold on dirty entry until memory acks (iter_advance gates it).
         // ----------------------------------------------------------------------
         ST_LC_FLUSH: begin
             cpu_rsp.stall = 1'b1;
